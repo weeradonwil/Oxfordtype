@@ -3,12 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<<<<<<< HEAD
-<title>Oxford 3000 — ฝึกคีย์คำศัพท์...</title>
-<link rel="icon" type="image/png" href="favicon.png">
-=======
-<title>Oxford 3000 — ฝึกคีย์คำศัพท์..</title>
->>>>>>> b7534cbc7654c4171a97e3a258991fba22ae1669
+<title>Oxford 3000 — ฝึกคีย์คำศัพท์ English 3000 Words</title>
+<link rel="icon" type="image/x-icon" href="favicon.ico">
 <style>
   :root{
     --ink:#2b2420;
@@ -136,6 +132,9 @@
   .clear-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;}
   .clear-select{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fffef9;color:var(--ink);font:inherit;min-width:140px;}
   .clear-status{margin-top:10px;font-size:13px;}
+  .clear-status .letter-grid{margin-top:14px;}
+  .clear-status .letter-btn{cursor:pointer;opacity:1;transition:opacity .2s ease;}
+  .clear-status .letter-btn:hover{opacity:0.7;}
 
 
   /* PRACTICE */
@@ -508,10 +507,16 @@ function norm(s){
 function normThai(s){
   return (s||'').trim().replace(/\s+/g,'').replace(/[()]/g,'');
 }
+function thaiWords(th){
+  return (th||'')
+    .replace(/\([^)]*\)/g,' ')
+    .split(/\s+/)
+    .map(normThai)
+    .filter(Boolean);
+}
 function thaiChunks(th){
   // remove parenthetical annotations, split remaining on spaces
-  const stripped = th.replace(/\([^)]*\)/g,' ');
-  const chunks = stripped.split(/\s+/).map(c=>c.trim()).filter(Boolean);
+  const chunks = thaiWords(th);
   // also add the raw full string (no spaces) as an accepted variant
   const full = normThai(th);
   const set = new Set(chunks.map(normThai));
@@ -522,7 +527,18 @@ function checkThaiAnswer(userAns, correctTh){
   const u = normThai(userAns);
   if(!u) return false;
   const accepted = thaiChunks(correctTh);
-  return accepted.has(u);
+  if(accepted.has(u)) return true;
+  const userWords = thaiWords(userAns);
+  if(!userWords.length) return false;
+  const correctWords = thaiWords(correctTh);
+  if(!correctWords.length || userWords.length > correctWords.length) return false;
+  const correctSet = new Set(correctWords);
+  const seen = new Set();
+  return userWords.every(word => {
+    if(!correctSet.has(word) || seen.has(word)) return false;
+    seen.add(word);
+    return true;
+  });
 }
 // accepts "a/b" style alternate English verb forms
 function checkVariant(userAns, correctStr){
@@ -533,7 +549,7 @@ function checkVariant(userAns, correctStr){
 
 // ---------- state ----------
 let view = 'home';
-let session = null; // {letter, order:[idx...], pos, target, stage:'en'|'th', wrongCountEn, wrongCountTh, results:[], curEntry}
+let session = null; // {letter, order:[idx...], pos, target, stage:'en'|'th', wrongCountEn, wrongCountTh, results:[], curEntry, progressDone}
 
 const app = document.getElementById('app');
 
@@ -582,13 +598,24 @@ function renderHome(){
     </div>
     <div class="card">
       <div class="setup-title">เลือกหมวดตัวอักษร</div>
+      <div class="setup-sub">A-Z = ฝึกแยกทีละตัวอักษร, AZ = รวมคำศัพท์ทั้งหมด 3290 คำ</div>
+      <div class="choice-row" id="categoryChoice">
+        <button class="choice-btn active" id="catSingle">A-Z</button>
+        <button class="choice-btn" id="catAll">AZ</button>
+      </div>
       <div class="letter-grid" id="letterGrid"></div>
+      <div id="azContainer" style="display:none;">
+        <div class="stat-pill" style="margin-bottom:16px;">
+          <b id="azWordCount">3290</b> คำศัพท์ทั้งหมด
+        </div>
+      </div>
     </div>
     <div class="card">
       <div class="setup-title">ล้างความคืบหน้า</div>
       <div class="clear-controls">
         <select class="clear-select" id="clearSelect">
           ${LETTERS.map(L=>`<option value="${L}">${L} — หมวด ${L}</option>`).join('')}
+          <option value="AZ">AZ — ทั้งหมด (3290 คำ)</option>
         </select>
         <button class="btn-secondary" id="clearLetterBtn">ล้างหมวดที่เลือก</button>
         <button class="btn-secondary" id="clearAllBtn">ล้างทั้งหมด</button>
@@ -602,6 +629,40 @@ function renderHome(){
   document.getElementById('irregPdfLink').href = 'data:application/pdf;base64,' + IRREG_PDF_B64;
   document.getElementById('irregStartBtn').onclick = ()=>{ view='irregSetup'; renderIrregSetup(); };
   document.getElementById('irregClearBtn').onclick = clearAllIrregMastered;
+  
+  // Update total word count for AZ
+  document.getElementById('azWordCount').textContent = DATA.length;
+  
+  // Category selector handlers
+  const catSingle = document.getElementById('catSingle');
+  const catAll = document.getElementById('catAll');
+  const letterGrid = document.getElementById('letterGrid');
+  const azContainer = document.getElementById('azContainer');
+  
+  catSingle.onclick = ()=>{
+    catSingle.classList.add('active');
+    catAll.classList.remove('active');
+    letterGrid.style.display = 'grid';
+    azContainer.style.display = 'none';
+  };
+  
+  catAll.onclick = ()=>{
+    catAll.classList.add('active');
+    catSingle.classList.remove('active');
+    letterGrid.style.display = 'none';
+    azContainer.style.display = 'block';
+    // Add start button if not exists
+    if(!document.getElementById('azStartBtn')){
+      const btn = document.createElement('button');
+      btn.id = 'azStartBtn';
+      btn.className = 'btn-primary';
+      btn.textContent = 'เริ่มฝึกทั้งหมด';
+      btn.style.marginTop = '12px';
+      azContainer.appendChild(btn);
+      btn.onclick = ()=>{ view='setupAZ'; renderSetupAZ(); };
+    }
+  };
+  
   const grid = document.getElementById('letterGrid');
   'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(L=>{
     const idxs = CATS[L];
@@ -627,6 +688,10 @@ function renderHome(){
 }
 
 async function clearMasteredForLetter(letter){
+  if(letter === 'AZ'){
+    await clearAllMastered();
+    return;
+  }
   if(!window.confirm(`ล้างความคืบหน้าของหมวด ${letter} หรือไม่?`)) return;
   const ids = CATS[letter] || [];
   ids.forEach(idx => {
@@ -701,27 +766,102 @@ function renderSetup(letter){
   };
 }
 
-function startSession(letter, count, includeMastered){
-  let pool = CATS[letter].slice();
-  if(!includeMastered){
-    const unmastered = pool.filter(i=>!mastered[norm(DATA[i][0])]);
-    if(unmastered.length >= count){ pool = unmastered; }
-    // else fall back to including mastered ones to fill the session
+// AZ (All) Setup function
+function renderSetupAZ(){
+  const total = DATA.length;
+  const done = Object.keys(mastered).filter(k=>mastered[k]).length;
+  const remaining = total - done;
+  let html = `
+    <div class="brand">
+      <div>
+        <h1>ทั้งหมด <span>AZ</span></h1>
+        <div class="tagline">${total} คำทั้งหมด • ผ่านแล้ว ${done} • คงเหลือ ${remaining}</div>
+      </div>
+      <button class="btn-text" id="backHome">‹ กลับหน้าหลัก</button>
+    </div>
+    <div class="card">
+      <div class="setup-title">ตั้งค่ารอบฝึก</div>
+      <div class="setup-sub">พิมพ์คำศัพท์ภาษาอังกฤษจากทุกหมวด A-Z ที่คุณนึกออกเอง ระบบจะไม่บอกล่วงหน้าว่ามีคำอะไรบ้าง — ถ้าสะกดผิดหรือไม่มีในรายการต้องพิมพ์ใหม่ และต้องพิมพ์คำแปลไทยให้ถูกด้วย</div>
+      <div class="row-between" style="margin-bottom:6px;"><span style="font-size:13px;color:#5c4e39;">จำนวนคำในรอบนี้</span></div>
+      <div class="choice-row" id="countChoices"></div>
+      <label class="mini" style="margin-bottom:18px;">
+        <input type="checkbox" id="includeMastered"> รวมคำที่เคยผ่านแล้วเข้ารอบทบทวนด้วย
+      </label>
+      <div><button class="btn-primary" id="startBtn">เริ่มฝึก</button></div>
+    </div>
+  `;
+  app.innerHTML = html;
+  document.getElementById('backHome').onclick = ()=>{ view='home'; renderHome(); };
+
+  const options = [20,50,100,200, total];
+  const uniqOptions = [...new Set(options)].filter(n=>n>0);
+  let chosenCount = Math.min(50, total);
+  const choicesEl = document.getElementById('countChoices');
+  function paintChoices(){
+    choicesEl.innerHTML='';
+    uniqOptions.forEach(n=>{
+      const b = document.createElement('button');
+      b.className='choice-btn'+(n===chosenCount?' active':'');
+      b.textContent = (n===total? `ทั้งหมด (${n})` : n+' คำ');
+      b.onclick = ()=>{ chosenCount=n; paintChoices(); };
+      choicesEl.appendChild(b);
+    });
   }
-  // shuffle
+  paintChoices();
+
+  document.getElementById('startBtn').onclick = ()=>{
+    const includeMastered = document.getElementById('includeMastered').checked;
+    startSessionAZ(chosenCount, includeMastered);
+  };
+}
+
+// AZ (All) Start Session function
+function startSessionAZ(count, includeMastered){
+  // Use the full merged A-Z pool so any Oxford 3000 word can be typed in AZ mode.
+  let pool = Array.from({length: DATA.length}, (_, i) => i);
+  // shuffle the full valid pool, but keep the requested count as the round target
   for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
-  const order = pool.slice(0, Math.min(count, pool.length));
+  const order = pool;
   session = {
-    letter, order, pos:0, target: order.length,
-    stage:'en', wrongEn:0, wrongTh:0, results:[], usedThisSession:new Set(), typedEn:''
+    letter: 'AZ', order, pos:0, target: Math.min(count, order.length),
+    stage:'en', wrongEn:0, wrongTh:0, results:[], usedThisSession:new Set(), typedEn:'', progressDone:0
   };
   view='practice';
   renderPractice();
 }
 
+function startSession(letter, count, includeMastered){
+  // Use the full letter pool so any valid word in this category is accepted.
+  let pool = CATS[letter].slice();
+  if(!includeMastered){
+    const unmastered = pool.filter(i=>!mastered[norm(DATA[i][0])]);
+    if(unmastered.length >= count){ pool = unmastered; }
+  }
+  // shuffle
+  for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
+  const order = pool;
+  session = {
+    letter, order, pos:0, target: Math.min(count, order.length),
+    stage:'en', wrongEn:0, wrongTh:0, results:[], usedThisSession:new Set(), typedEn:'', progressDone:0
+  };
+  view='practice';
+  renderPractice();
+}
+
+function syncPracticeProgress(){
+  const s = session;
+  if(!s) return;
+  const done = s.progressDone || 0;
+  const pct = s.target ? Math.round(done / s.target * 100) : 0;
+  const track = document.querySelector('.progress-track i');
+  const label = document.querySelector('.progress-label');
+  if(track) track.style.width = pct + '%';
+  if(label) label.textContent = `ถูกต้อง ${done}/${s.target}`;
+}
+
 function renderPractice(){
   const s = session;
-  const done = s.pos;
+  const done = s.progressDone || 0;
   const pct = s.target? Math.round(done/s.target*100):0;
   let html = `
     <div class="brand">
@@ -730,7 +870,7 @@ function renderPractice(){
     </div>
     <div class="progress-line">
       <div class="progress-track"><i style="width:${pct}%"></i></div>
-      <div class="progress-label">${done}/${s.target}</div>
+      <div class="progress-label">ถูกต้อง ${done}/${s.target}</div>
     </div>
     <div class="card" id="practiceCard"></div>
   `;
@@ -792,7 +932,8 @@ function handleSubmit(){
   if(s.stage==='en'){
     const key = norm(val);
     if(!key){ return; }
-    const idx = DATA.findIndex((p,i)=> CATS[s.letter].includes(i) && norm(p[0])===key );
+    const activePool = s.order || [];
+    const idx = DATA.findIndex((p,i)=> activePool.includes(i) && norm(p[0])===key );
     if(idx === -1){
       input.classList.add('err'); input.classList.remove('ok');
       fb.textContent = 'ไม่พบคำนี้ใน Oxford 3000 หมวด '+s.letter+' หรือสะกดผิด — ลองใหม่';
@@ -829,6 +970,8 @@ function handleSubmit(){
     input.classList.remove('err'); input.classList.add('ok');
     fb.textContent = 'ถูกต้อง!';
     fb.className='feedback ok';
+    s.progressDone = (s.progressDone || 0) + 1;
+    syncPracticeProgress();
     mastered[norm(s.curEntry[0])] = true;
     saveMastered();
     setTimeout(()=>{ advance(true, s.curEntry); }, 300);
@@ -868,7 +1011,7 @@ function renderSummary(){
 
 // ---------- irregular verbs mode ----------
 let irregSession = null; // {order:[idx...], pos, target, stage:'past'|'pp'|'th', results:[]}
-let irregMode = 'random'; // 'random' | 'free'
+let irregMode = 'random'; // 'random' | 'free' | 'clear'
 
 function irregLetterCounts(letter){
   const idxs = IRREG_CATS[letter] || [];
@@ -904,6 +1047,7 @@ function renderIrregSetup(){
     const modes = [
       {key:'random', label:'แบบที่ 1 — สุ่มคำศัพท์'},
       {key:'free', label:'แบบที่ 2 — หมวด A-Z (พิมพ์อิสระ)'},
+      {key:'clear', label:'ล้างความคืบหน้า'},
     ];
     modes.forEach(m=>{
       const b = document.createElement('button');
@@ -944,7 +1088,7 @@ function renderIrregSetup(){
         const includeMastered = document.getElementById('irregIncludeMastered').checked;
         startIrregSession(chosenCount, includeMastered);
       };
-    } else {
+    } else if(irregMode==='free'){
       bodyEl.innerHTML = `
         <div class="letter-grid" id="irregLetterGrid"></div>
       `;
@@ -964,9 +1108,78 @@ function renderIrregSetup(){
         }
         grid.appendChild(btn);
       });
+    } else if(irregMode==='clear'){
+      bodyEl.innerHTML = `
+        <div class="setup-sub" style="margin-bottom:18px; color:#a8452f;">⚠️ ส่วนนี้สำหรับล้างความคืบหน้า การกระทำนี้ไม่สามารถย้อนกลับได้</div>
+        <div style="margin-bottom:18px;">
+          <div style="font-size:13px; color:#5c4e39; margin-bottom:12px; font-weight:700;">เลือกสิ่งที่ต้องการล้าง:</div>
+          <div class="choice-row" id="irregClearChoices"></div>
+        </div>
+        <div class="clear-status" id="clearStatus"></div>
+      `;
+      const clearChoicesEl = document.getElementById('irregClearChoices');
+      let clearMode = 'all';
+      function paintClearChoices(){
+        clearChoicesEl.innerHTML='';
+        const opts = [
+          {key:'all', label:'ล้างทั้งหมด'},
+          {key:'letter', label:'ล้างเฉพาะหมวด A-Z'},
+        ];
+        opts.forEach(o=>{
+          const b = document.createElement('button');
+          b.className='choice-btn'+(clearMode===o.key?' active':'');
+          b.textContent = o.label;
+          b.onclick = ()=>{ clearMode=o.key; paintClearChoices(); paintClearLetters(); };
+          clearChoicesEl.appendChild(b);
+        });
+      }
+      
+      function paintClearLetters(){
+        const statusEl = document.getElementById('clearStatus');
+        if(clearMode==='all'){
+          statusEl.innerHTML = `
+            <div style="margin-top:20px;">
+              <button class="btn-primary" style="background:#a8452f;" id="confirmClearAll">✓ ยืนยันการล้างทั้งหมด</button>
+            </div>
+          `;
+          document.getElementById('confirmClearAll').onclick = ()=>{
+            irregMastered = {};
+            saveIrregMastered();
+            statusEl.innerHTML = '<div style="color:#4c6b4f; font-weight:700; margin-top:14px;">✓ ล้างความคืบหน้าเสร็จสิ้น</div>';
+            setTimeout(()=>{ view='home'; renderHome(); }, 1500);
+          };
+        } else {
+          statusEl.innerHTML = `
+            <div class="letter-grid" id="irregClearLetterGrid" style="margin-top:14px;"></div>
+          `;
+          const grid = document.getElementById('irregClearLetterGrid');
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(L=>{
+            const idxs = IRREG_CATS[L];
+            const btn = document.createElement('div');
+            if(!idxs || idxs.length===0){
+              btn.className='letter-btn empty';
+              btn.innerHTML = `<span class="L">${L}</span><span class="cnt">ไม่มี</span>`;
+            } else {
+              const {total:t, done:d} = irregLetterCounts(L);
+              btn.className='letter-btn';
+              btn.innerHTML = `<span class="L">${L}</span><span class="cnt">${d}/${t}</span>`;
+              btn.onclick = ()=>{
+                const keysToDelete = idxs.map(i => norm(IRREG[i][0]));
+                keysToDelete.forEach(k => delete irregMastered[k]);
+                saveIrregMastered();
+                btn.style.opacity = '0.45';
+                btn.style.pointerEvents = 'none';
+              };
+            }
+            grid.appendChild(btn);
+          });
+        }
+      }
+      
+      paintClearChoices();
+      paintClearLetters();
     }
   }
-
   paintModeChoices();
   paintModeBody();
 }
@@ -979,7 +1192,7 @@ function startIrregSession(count, includeMastered){
   }
   for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
   const order = pool.slice(0, Math.min(count, pool.length));
-  irregSession = { order, pos:0, target: order.length, stage:'past', results:[] };
+  irregSession = { order, pos:0, target: order.length, stage:'past', results:[], progressDone:0 };
   view='irregPractice';
   renderIrregPractice();
 }
@@ -1041,7 +1254,7 @@ function startIrregFreeSession(letter, count, includeMastered){
   const order = pool.slice(0, Math.min(count, pool.length));
   irregSession = {
     mode:'free', letter, order, pos:0, target: order.length,
-    stage:'base', results:[], usedThisSession:new Set(), curEntry:null, curIdx:null
+    stage:'base', results:[], usedThisSession:new Set(), curEntry:null, curIdx:null, progressDone:0
   };
   view='irregFreePractice';
   renderIrregFreePractice();
@@ -1049,7 +1262,7 @@ function startIrregFreeSession(letter, count, includeMastered){
 
 function renderIrregFreePractice(){
   const s = irregSession;
-  const done = s.pos;
+  const done = s.progressDone || 0;
   const pct = s.target? Math.round(done/s.target*100):0;
   let html = `
     <div class="brand">
@@ -1058,7 +1271,7 @@ function renderIrregFreePractice(){
     </div>
     <div class="progress-line">
       <div class="progress-track"><i style="width:${pct}%"></i></div>
-      <div class="progress-label">${done}/${s.target}</div>
+      <div class="progress-label">ถูกต้อง ${done}/${s.target}</div>
     </div>
     <div class="card" id="irregFreeCard"></div>
   `;
@@ -1183,6 +1396,12 @@ function handleIrregFreeSubmit(){
     input.classList.remove('err'); input.classList.add('ok');
     fb.textContent = 'ถูกต้อง!';
     fb.className='feedback ok';
+    s.progressDone = (s.progressDone || 0) + 1;
+    const track = document.querySelector('.progress-track i');
+    const label = document.querySelector('.progress-label');
+    const pct = s.target ? Math.round(s.progressDone / s.target * 100) : 0;
+    if(track) track.style.width = pct + '%';
+    if(label) label.textContent = `ถูกต้อง ${s.progressDone}/${s.target}`;
     irregMastered[norm(s.curEntry[0])] = true;
     saveIrregMastered();
     setTimeout(()=>{ advanceIrregFree(true, s.curEntry); }, 300);
@@ -1222,7 +1441,7 @@ function renderIrregFreeSummary(){
 
 function renderIrregPractice(){
   const s = irregSession;
-  const done = s.pos;
+  const done = s.progressDone || 0;
   const pct = s.target? Math.round(done/s.target*100):0;
   let html = `
     <div class="brand">
@@ -1231,7 +1450,7 @@ function renderIrregPractice(){
     </div>
     <div class="progress-line">
       <div class="progress-track"><i style="width:${pct}%"></i></div>
-      <div class="progress-label">${done}/${s.target}</div>
+      <div class="progress-label">ถูกต้อง ${done}/${s.target}</div>
     </div>
     <div class="card" id="irregCard"></div>
   `;
@@ -1347,6 +1566,12 @@ function handleIrregSubmit(){
     input.classList.remove('err'); input.classList.add('ok');
     fb.textContent = 'ถูกต้อง!';
     fb.className='feedback ok';
+    s.progressDone = (s.progressDone || 0) + 1;
+    const track = document.querySelector('.progress-track i');
+    const label = document.querySelector('.progress-label');
+    const pct = s.target ? Math.round(s.progressDone / s.target * 100) : 0;
+    if(track) track.style.width = pct + '%';
+    if(label) label.textContent = `ถูกต้อง ${s.progressDone}/${s.target}`;
     irregMastered[norm(entry[0])] = true;
     saveIrregMastered();
     setTimeout(()=>{ advanceIrreg(true, entry); }, 300);

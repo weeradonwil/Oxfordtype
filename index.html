@@ -480,6 +480,7 @@ const LETTERS = Object.keys(CATS).sort();
 let mastered = {}; // { "word_lowercase": true }
 let storageReady = false;
 let clearStatus = '';
+let clearIrregStatus = '';
 
 async function loadMastered(){
   try{
@@ -566,16 +567,13 @@ function letterCounts(letter){
 function renderHome(){
   let totalWords = DATA.length;
   let totalDone = Object.keys(mastered).length;
+  let totalIrreg = IRREG_VISIBLE.length;
+  let totalIrregDone = Object.keys(irregMastered).length;
   let html = `
     <div class="brand">
       <div>
         <h1>Oxford <span>3000</span> — ฝึกคีย์คำศัพท์</h1>
       </div>
-    </div>
-    <div class="stats-row">
-      <div class="stat-pill">ทั้งหมด <b>${totalWords}</b> คำ</div>
-      <div class="stat-pill">ผ่านแล้ว <b>${totalDone}</b> คำ</div>
-      <div class="stat-pill">คงเหลือ <b>${totalWords-totalDone}</b> คำ</div>
     </div>
     <div class="card">
       <div class="setup-title">เอกสารอ้างอิง (PDF)</div>
@@ -597,9 +595,24 @@ function renderHome(){
         <button class="choice-btn" id="catAll">AZ</button>
       </div>
       <div class="letter-grid" id="letterGrid"></div>
-      <div id="azContainer" style="display:none;">
-        <div class="stat-pill" style="margin-bottom:16px;">
-          <b id="azWordCount">3290</b> คำศัพท์ทั้งหมด
+      <div class="stats-row" id="oxfordStats" style="margin-top:14px; margin-bottom:0;">
+        <div class="stat-pill">ทั้งหมด <b>${totalWords}</b> คำ</div>
+        <div class="stat-pill">ผ่านแล้ว <b>${totalDone}</b> คำ</div>
+        <div class="stat-pill">คงเหลือ <b>${totalWords-totalDone}</b> คำ</div>
+      </div>
+      <div id="azContainer" style="display:none; margin-top:14px;">
+        <div class="stats-row" style="margin-bottom:14px;">
+          <div class="stat-pill">ทั้งหมด <b>${totalWords}</b> คำ</div>
+          <div class="stat-pill">ผ่านแล้ว <b>${totalDone}</b> คำ</div>
+          <div class="stat-pill">คงเหลือ <b>${totalWords-totalDone}</b> คำ</div>
+        </div>
+        <div class="row-between" style="margin-bottom:6px;"><span style="font-size:13px;color:#5c4e39;">จำนวนคำในรอบนี้</span></div>
+        <div class="choice-row" id="azCountChoices"></div>
+        <label class="mini" style="margin-bottom:18px;">
+          <input type="checkbox" id="azIncludeMastered"> รวมคำที่เคยผ่านแล้วเข้ารอบทบทวนด้วย
+        </label>
+        <div class="row-between" style="gap:12px; flex-wrap:wrap;">
+          <button class="btn-primary" id="azStartBtn">เริ่มฝึกทั้งหมด</button>
         </div>
       </div>
     </div>
@@ -609,8 +622,18 @@ function renderHome(){
         <button class="choice-btn active" id="irregCatSingle">A-Z</button>
         <button class="choice-btn" id="irregCatAll">ทั้งหมด</button>
       </div>
-      <div class="choice-row" id="irregLetterGrid" style="display:none; flex-wrap:wrap; gap:8px;"></div>
-      <div id="irregAllContainer" style="display:none;">
+      <div class="letter-grid" id="irregLetterGrid"></div>
+      <div class="stats-row" id="irregStats" style="margin-top:14px; margin-bottom:0;">
+        <div class="stat-pill">ทั้งหมด <b>${totalIrreg}</b> คำ</div>
+        <div class="stat-pill">ผ่านแล้ว <b>${totalIrregDone}</b> คำ</div>
+        <div class="stat-pill">คงเหลือ <b>${totalIrreg-totalIrregDone}</b> คำ</div>
+      </div>
+      <div id="irregAllContainer" style="display:none; margin-top:14px;">
+        <div class="stats-row" style="margin-bottom:14px;">
+          <div class="stat-pill">ทั้งหมด <b>${totalIrreg}</b> คำ</div>
+          <div class="stat-pill">ผ่านแล้ว <b>${totalIrregDone}</b> คำ</div>
+          <div class="stat-pill">คงเหลือ <b>${totalIrreg-totalIrregDone}</b> คำ</div>
+        </div>
         <div class="row-between" style="margin-bottom:6px;"><span style="font-size:13px;color:#5c4e39;">จำนวนคำในรอบนี้</span></div>
         <div class="choice-row" id="irregCountChoices"></div>
         <label class="mini" style="margin-bottom:18px;">
@@ -622,7 +645,7 @@ function renderHome(){
       </div>
     </div>
     <div class="card">
-      <div class="setup-title">ล้างความคืบหน้า</div>
+      <div class="setup-title">ล้างความคืบหน้า Oxford</div>
       <div class="clear-controls">
         <select class="clear-select" id="clearSelect">
           ${LETTERS.map(L=>`<option value="${L}">${L} — หมวด ${L}</option>`).join('')}
@@ -632,6 +655,18 @@ function renderHome(){
         <button class="btn-secondary" id="clearAllBtn">ล้างทั้งหมด</button>
       </div>
       ${clearStatus ? `<div class="clear-status feedback ok">${clearStatus}</div>` : ''}
+    </div>
+    <div class="card">
+      <div class="setup-title">ล้างความคืบหน้า กริยา 3 ช่อง</div>
+      <div class="clear-controls">
+        <select class="clear-select" id="clearIrregSelect">
+          ${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter(L=>IRREG_CATS[L]&&IRREG_CATS[L].length>0).map(L=>`<option value="${L}">${L} — หมวด ${L}</option>`).join('')}
+          <option value="ALL">ทั้งหมด (${IRREG_VISIBLE.length} กริยา)</option>
+        </select>
+        <button class="btn-secondary" id="clearIrregLetterBtn">ล้างหมวดที่เลือก</button>
+        <button class="btn-secondary" id="clearIrregAllBtn">ล้างทั้งหมด</button>
+      </div>
+      ${clearIrregStatus ? `<div class="clear-status feedback ok">${clearIrregStatus}</div>` : ''}
     </div>
     <footer class="note">ข้อมูลคำศัพท์และคำแปลบันทึกไว้ในเครื่องนี้เท่านั้น (ไม่แชร์กับใคร)</footer>
   `;
@@ -644,14 +679,14 @@ function renderHome(){
   const irregCatAll = document.getElementById('irregCatAll');
   const irregLetterGrid = document.getElementById('irregLetterGrid');
   const irregAllContainer = document.getElementById('irregAllContainer');
+  const irregStats = document.getElementById('irregStats');
   
   irregCatSingle.onclick = ()=>{
     irregMode = 'letters';
     irregCatSingle.classList.add('active');
     irregCatAll.classList.remove('active');
     irregLetterGrid.style.display = 'grid';
-    irregLetterGrid.style.gridTemplateColumns = 'repeat(6, 1fr)';
-    irregLetterGrid.style.gap = '10px';
+    irregStats.style.display = 'flex';
     irregAllContainer.style.display = 'none';
   };
   
@@ -660,27 +695,25 @@ function renderHome(){
     irregCatAll.classList.add('active');
     irregCatSingle.classList.remove('active');
     irregLetterGrid.style.display = 'none';
+    irregStats.style.display = 'none';
     irregAllContainer.style.display = 'block';
   };
   
-  // Populate irregular letter grid (horizontal layout - Oxford style 6 columns)
+  // Populate irregular letter grid — Oxford style (letter-btn with progress bar)
   const irregGrid = document.getElementById('irregLetterGrid');
   'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(L=>{
     const idxs = IRREG_CATS[L];
-    const btn = document.createElement('button');
+    const btn = document.createElement('div');
     if(!idxs || idxs.length===0){
-      btn.className='choice-btn disabled';
-      btn.textContent = L;
-      btn.disabled = true;
-      btn.style.opacity = '0.4';
+      btn.className='letter-btn empty';
+      btn.innerHTML = `<span class="L">${L}</span><span class="cnt">ไม่มี</span>`;
     } else {
       const {total, done} = irregLetterCounts(L);
-      btn.className='choice-btn' + (done>=total? ' done':'');
-      btn.innerHTML = `<span style="font-weight:700; font-size:16px;">${L}</span><br><small style="font-size:11px; opacity:0.8;">${done}/${total}</small>`;
+      const pct = total? Math.round(done/total*100):0;
+      btn.className='letter-btn' + (done>=total? ' done':'');
+      btn.innerHTML = `<span class="L">${L}</span><span class="cnt">${done}/${total}</span><div class="bar"><i style="width:${pct}%"></i></div>`;
       btn.onclick = ()=>{ view='irregFreeSetup'; renderIrregFreeSetup(L); };
     }
-    btn.style.padding = '14px 8px';
-    btn.style.textAlign = 'center';
     irregGrid.appendChild(btn);
   });
   
@@ -708,19 +741,18 @@ function renderHome(){
   }
   setupIrregAllMode();
   
-  // Update total word count for AZ
-  document.getElementById('azWordCount').textContent = DATA.length;
-  
   // Category selector handlers
   const catSingle = document.getElementById('catSingle');
   const catAll = document.getElementById('catAll');
   const letterGrid = document.getElementById('letterGrid');
   const azContainer = document.getElementById('azContainer');
+  const oxfordStats = document.getElementById('oxfordStats');
   
   catSingle.onclick = ()=>{
     catSingle.classList.add('active');
     catAll.classList.remove('active');
     letterGrid.style.display = 'grid';
+    oxfordStats.style.display = 'flex';
     azContainer.style.display = 'none';
   };
   
@@ -728,18 +760,33 @@ function renderHome(){
     catAll.classList.add('active');
     catSingle.classList.remove('active');
     letterGrid.style.display = 'none';
+    oxfordStats.style.display = 'none';
     azContainer.style.display = 'block';
-    // Add start button if not exists
-    if(!document.getElementById('azStartBtn')){
-      const btn = document.createElement('button');
-      btn.id = 'azStartBtn';
-      btn.className = 'btn-primary';
-      btn.textContent = 'เริ่มฝึกทั้งหมด';
-      btn.style.marginTop = '12px';
-      azContainer.appendChild(btn);
-      btn.onclick = ()=>{ view='setupAZ'; renderSetupAZ(); };
-    }
   };
+
+  // Setup AZ all mode count selection
+  (function setupAzAllMode(){
+    const total = DATA.length;
+    const options = [20, 50, 100, 200, total];
+    const uniqOptions = [...new Set(options)].filter(n=>n>0);
+    let chosenCount = Math.min(50, total);
+    const choicesEl = document.getElementById('azCountChoices');
+    function paintChoices(){
+      choicesEl.innerHTML='';
+      uniqOptions.forEach(n=>{
+        const b = document.createElement('button');
+        b.className='choice-btn'+(n===chosenCount?' active':'');
+        b.textContent = (n===total? `ทั้งหมด (${n})` : n+' คำ');
+        b.onclick = ()=>{ chosenCount=n; paintChoices(); };
+        choicesEl.appendChild(b);
+      });
+    }
+    paintChoices();
+    document.getElementById('azStartBtn').onclick = ()=>{
+      const includeMastered = document.getElementById('azIncludeMastered').checked;
+      startSessionAZ(chosenCount, includeMastered);
+    };
+  })();
   
   const grid = document.getElementById('letterGrid');
   'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(L=>{
@@ -764,6 +811,13 @@ function renderHome(){
     clearMasteredForLetter(clearSelect.value);
   };
   document.getElementById('clearAllBtn').onclick = clearAllMastered;
+
+  const clearIrregSelect = document.getElementById('clearIrregSelect');
+  document.getElementById('clearIrregLetterBtn').onclick = ()=>{
+    if(!clearIrregSelect) return;
+    clearIrregMasteredForLetter(clearIrregSelect.value);
+  };
+  document.getElementById('clearIrregAllBtn').onclick = clearAllIrregMastered;
 }
 
 async function clearMasteredForLetter(letter){
@@ -787,6 +841,30 @@ async function clearAllMastered(){
   mastered = {};
   await saveMastered();
   clearStatus = 'ล้างความคืบหน้าทั้งหมดแล้ว';
+  renderHome();
+}
+
+async function clearIrregMasteredForLetter(letter){
+  if(letter === 'ALL'){
+    await clearAllIrregMastered();
+    return;
+  }
+  if(!window.confirm(`ล้างความคืบหน้ากริยา 3 ช่อง หมวด ${letter} หรือไม่?`)) return;
+  const idxs = IRREG_CATS[letter] || [];
+  idxs.forEach(idx => {
+    const word = norm(IRREG_VISIBLE[idx][0]);
+    if(word) delete irregMastered[word];
+  });
+  await saveIrregMastered();
+  clearIrregStatus = `ล้างความคืบหน้ากริยา 3 ช่อง หมวด ${letter} แล้ว`;
+  renderHome();
+}
+
+async function clearAllIrregMastered(){
+  if(!window.confirm('ล้างความคืบหน้ากริยา 3 ช่อง ทั้งหมด หรือไม่?')) return;
+  irregMastered = {};
+  await saveIrregMastered();
+  clearIrregStatus = 'ล้างความคืบหน้ากริยา 3 ช่อง ทั้งหมดแล้ว';
   renderHome();
 }
 

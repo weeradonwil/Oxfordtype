@@ -480,7 +480,6 @@ const LETTERS = Object.keys(CATS).sort();
 let mastered = {}; // { "word_lowercase": true }
 let storageReady = false;
 let clearStatus = '';
-let irregClearStatus = '';
 
 async function loadMastered(){
   try{
@@ -579,14 +578,6 @@ function renderHome(){
       <div class="stat-pill">คงเหลือ <b>${totalWords-totalDone}</b> คำ</div>
     </div>
     <div class="card">
-        <div class="setup-title">กริยา 3 ช่อง </div>
-          <div class="setup-sub">รวม ${IRREG_VISIBLE.length} คำ ผ่านแล้ว ${Object.keys(irregMastered).length} คำ</div>
-      <div class="row-between">
-        <button class="btn-primary" id="irregStartBtn">เริ่มฝึกกริยา 3 ช่อง</button>
-      </div>
-      ${irregClearStatus ? `<div class="clear-status feedback ok">${irregClearStatus}</div>` : ''}
-    </div>
-    <div class="card">
       <div class="setup-title">เอกสารอ้างอิง (PDF)</div>
       <div class="pdf-links">
         <a class="pdf-link-btn" id="oxfordPdfLink" target="_blank" rel="noopener" download="Oxford3000ET.pdf">
@@ -600,8 +591,7 @@ function renderHome(){
       </div>
     </div>
     <div class="card">
-      <div class="setup-title">เลือกหมวดตัวอักษร</div>
-      <div class="setup-sub">A-Z = ฝึกแยกทีละตัวอักษร, AZ = รวมคำศัพท์ทั้งหมด 3290 คำ</div>
+      <div class="setup-title" style="margin-bottom: 15px;">รูปแบบคำศัพท์ Oxford</div>
       <div class="choice-row" id="categoryChoice">
         <button class="choice-btn active" id="catSingle">A-Z</button>
         <button class="choice-btn" id="catAll">AZ</button>
@@ -614,11 +604,28 @@ function renderHome(){
       </div>
     </div>
     <div class="card">
+      <div class="setup-title" style="margin-bottom: 15px;">รูปแบบคำศัพท์ กริยา 3 ช่อง</div>
+      <div class="choice-row" id="categoryIrregChoice">
+        <button class="choice-btn active" id="irregCatSingle">A-Z</button>
+        <button class="choice-btn" id="irregCatAll">ทั้งหมด</button>
+      </div>
+      <div class="choice-row" id="irregLetterGrid" style="display:none; flex-wrap:wrap; gap:8px;"></div>
+      <div id="irregAllContainer" style="display:none;">
+        <div class="row-between" style="margin-bottom:6px;"><span style="font-size:13px;color:#5c4e39;">จำนวนคำในรอบนี้</span></div>
+        <div class="choice-row" id="irregCountChoices"></div>
+        <label class="mini" style="margin-bottom:18px;">
+          <input type="checkbox" id="irregIncludeMastered"> รวมคำที่เคยผ่านแล้วเข้ารอบทบทวนด้วย
+        </label>
+        <div class="row-between" style="gap:12px; flex-wrap:wrap;">
+          <button class="btn-primary" id="irregStartSessionBtn">เริ่มฝึก</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
       <div class="setup-title">ล้างความคืบหน้า</div>
       <div class="clear-controls">
         <select class="clear-select" id="clearSelect">
           ${LETTERS.map(L=>`<option value="${L}">${L} — หมวด ${L}</option>`).join('')}
-          <option value="IRREG">IRREG — กริยา 3 ช่อง</option>
           <option value="AZ">AZ — ทั้งหมด (3290 คำ)</option>
         </select>
         <button class="btn-secondary" id="clearLetterBtn">ล้างหมวดที่เลือก</button>
@@ -631,7 +638,75 @@ function renderHome(){
   app.innerHTML = html;
   document.getElementById('oxfordPdfLink').href = 'data:application/pdf;base64,' + OXFORD_PDF_B64;
   document.getElementById('irregPdfLink').href = 'data:application/pdf;base64,' + IRREG_PDF_B64;
-  document.getElementById('irregStartBtn').onclick = ()=>{ view='irregSetup'; renderIrregSetup(); };
+  
+  // Irregular verbs category selector
+  const irregCatSingle = document.getElementById('irregCatSingle');
+  const irregCatAll = document.getElementById('irregCatAll');
+  const irregLetterGrid = document.getElementById('irregLetterGrid');
+  const irregAllContainer = document.getElementById('irregAllContainer');
+  
+  irregCatSingle.onclick = ()=>{
+    irregMode = 'letters';
+    irregCatSingle.classList.add('active');
+    irregCatAll.classList.remove('active');
+    irregLetterGrid.style.display = 'grid';
+    irregLetterGrid.style.gridTemplateColumns = 'repeat(6, 1fr)';
+    irregLetterGrid.style.gap = '10px';
+    irregAllContainer.style.display = 'none';
+  };
+  
+  irregCatAll.onclick = ()=>{
+    irregMode = 'all';
+    irregCatAll.classList.add('active');
+    irregCatSingle.classList.remove('active');
+    irregLetterGrid.style.display = 'none';
+    irregAllContainer.style.display = 'block';
+  };
+  
+  // Populate irregular letter grid (horizontal layout - Oxford style 6 columns)
+  const irregGrid = document.getElementById('irregLetterGrid');
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(L=>{
+    const idxs = IRREG_CATS[L];
+    const btn = document.createElement('button');
+    if(!idxs || idxs.length===0){
+      btn.className='choice-btn disabled';
+      btn.textContent = L;
+      btn.disabled = true;
+      btn.style.opacity = '0.4';
+    } else {
+      const {total, done} = irregLetterCounts(L);
+      btn.className='choice-btn' + (done>=total? ' done':'');
+      btn.innerHTML = `<span style="font-weight:700; font-size:16px;">${L}</span><br><small style="font-size:11px; opacity:0.8;">${done}/${total}</small>`;
+      btn.onclick = ()=>{ view='irregFreeSetup'; renderIrregFreeSetup(L); };
+    }
+    btn.style.padding = '14px 8px';
+    btn.style.textAlign = 'center';
+    irregGrid.appendChild(btn);
+  });
+  
+  // Setup irregular all mode count selection
+  function setupIrregAllMode(){
+    const options = [10, 20, 50, IRREG_VISIBLE.length];
+    const uniqOptions = [...new Set(options)].filter(n=>n>0);
+    let chosenCount = Math.min(20, IRREG_VISIBLE.length);
+    const choicesEl = document.getElementById('irregCountChoices');
+    function paintChoices(){
+      choicesEl.innerHTML='';
+      uniqOptions.forEach(n=>{
+        const b = document.createElement('button');
+        b.className='choice-btn'+(n===chosenCount?' active':'');
+        b.textContent = (n===IRREG_VISIBLE.length? `ทั้งหมด (${n})` : n+' คำ');
+        b.onclick = ()=>{ chosenCount=n; paintChoices(); };
+        choicesEl.appendChild(b);
+      });
+    }
+    paintChoices();
+    document.getElementById('irregStartSessionBtn').onclick = ()=>{
+      const includeMastered = document.getElementById('irregIncludeMastered').checked;
+      startIrregFreeAllSession(chosenCount, includeMastered);
+    };
+  }
+  setupIrregAllMode();
   
   // Update total word count for AZ
   document.getElementById('azWordCount').textContent = DATA.length;
@@ -686,13 +761,6 @@ function renderHome(){
   const clearSelect = document.getElementById('clearSelect');
   document.getElementById('clearLetterBtn').onclick = ()=>{
     if(!clearSelect) return;
-    // If IRREG selected, open the irregular-verbs clear UI
-    if(clearSelect.value === 'IRREG'){
-      irregMode = 'clear';
-      view = 'irregSetup';
-      renderIrregSetup();
-      return;
-    }
     clearMasteredForLetter(clearSelect.value);
   };
   document.getElementById('clearAllBtn').onclick = clearAllMastered;
@@ -719,14 +787,6 @@ async function clearAllMastered(){
   mastered = {};
   await saveMastered();
   clearStatus = 'ล้างความคืบหน้าทั้งหมดแล้ว';
-  renderHome();
-}
-
-async function clearAllIrregMastered(){
-  if(!window.confirm('ล้างความคืบหน้าของกริยา 3 ช่อง ทั้งหมด หรือไม่?')) return;
-  irregMastered = {};
-  await saveIrregMastered();
-  irregClearStatus = 'ล้างความคืบหน้ากริยา 3 ช่องแล้ว';
   renderHome();
 }
 
@@ -1022,7 +1082,7 @@ function renderSummary(){
 
 // ---------- irregular verbs mode ----------
 let irregSession = null; // {order:[idx...], pos, target, stage:'past'|'pp'|'th', results:[]}
-let irregMode = 'letters'; // 'letters' | 'all' | 'clear'
+let irregMode = 'letters'; // 'letters' | 'all'
 
 function irregLetterCounts(letter){
   const idxs = IRREG_CATS[letter] || [];
@@ -1058,7 +1118,6 @@ function renderIrregSetup(){
     const modes = [
       {key:'letters', label:'แบบที่ 1 — หมวด A-Z (กริยา 3 ช่อง)'},
       {key:'all', label:'แบบที่ 2 — รวมทั้งหมด 266 (กริยา 3 ช่อง)'},
-      {key:'clear', label:'ล้างความคืบหน้า'},
     ];
     modes.forEach(m=>{
       const b = document.createElement('button');
@@ -1080,7 +1139,6 @@ function renderIrregSetup(){
         </label>
         <div class="row-between" style="gap:12px; flex-wrap:wrap;">
           <button class="btn-primary" id="irregStartSessionBtn">เริ่มฝึก</button>
-          <button class="btn-secondary" id="irregGoClearBtn">ล้างความคืบหน้า</button>
         </div>
       `;
       const options = [10,20,50, total];
@@ -1102,18 +1160,13 @@ function renderIrregSetup(){
         const includeMastered = document.getElementById('irregIncludeMastered').checked;
         startIrregFreeAllSession(chosenCount, includeMastered);
       };
-      document.getElementById('irregGoClearBtn').onclick = ()=>{
-        irregMode = 'clear';
-        paintModeChoices();
-        paintModeBody();
-      };
     } else if(irregMode==='letters'){
       bodyEl.innerHTML = `
         <div class="letter-grid" id="irregLetterGrid"></div>
       `;
       const grid = document.getElementById('irregLetterGrid');
       'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(L=>{
-          const idxs = IRREG_CATS[L];
+        const idxs = IRREG_CATS[L];
         const btn = document.createElement('div');
         if(!idxs || idxs.length===0){
           btn.className='letter-btn empty';
@@ -1127,81 +1180,6 @@ function renderIrregSetup(){
         }
         grid.appendChild(btn);
       });
-    } else if(irregMode==='clear'){
-      bodyEl.innerHTML = `
-        <div class="setup-sub" style="margin-bottom:18px; color:#a8452f;">⚠️ ส่วนนี้สำหรับล้างความคืบหน้า การกระทำนี้ไม่สามารถย้อนกลับได้</div>
-        <div style="margin-bottom:18px;">
-          <div style="font-size:13px; color:#5c4e39; margin-bottom:12px; font-weight:700;">เลือกสิ่งที่ต้องการล้าง:</div>
-          <div class="choice-row" id="irregClearChoices"></div>
-        </div>
-        <div class="clear-status" id="clearStatus"></div>
-      `;
-      const clearChoicesEl = document.getElementById('irregClearChoices');
-      let clearMode = 'all';
-      function paintClearChoices(){
-        clearChoicesEl.innerHTML='';
-        const opts = [
-          {key:'all', label:'ล้างทั้งหมด'},
-          {key:'letter', label:'ล้างเฉพาะหมวด'},
-        ];
-        opts.forEach(o=>{
-          const b = document.createElement('button');
-          b.className='choice-btn'+(clearMode===o.key?' active':'');
-          b.textContent = o.label;
-          b.onclick = ()=>{ clearMode=o.key; paintClearChoices(); paintClearLetters(); };
-          clearChoicesEl.appendChild(b);
-        });
-      }
-      
-      function paintClearLetters(){
-        const statusEl = document.getElementById('clearStatus');
-        if(clearMode==='all'){
-          statusEl.innerHTML = `
-            <div style="margin-top:20px;">
-              <button class="btn-primary" style="background:#a8452f;" id="confirmClearAll">✓ ยืนยันการล้างทั้งหมด</button>
-            </div>
-          `;
-          document.getElementById('confirmClearAll').onclick = async ()=>{
-            irregMastered = {};
-            await saveIrregMastered();
-            irregClearStatus = 'ล้างความคืบหน้ากริยา 3 ช่องแล้ว';
-            statusEl.innerHTML = '<div style="color:#4c6b4f; font-weight:700; margin-top:14px;">✓ ล้างความคืบหน้าเสร็จสิ้น</div>';
-            setTimeout(()=>{ view='home'; renderHome(); }, 1500);
-          };
-        } else {
-        
-        // default: letter
-          statusEl.innerHTML = `
-            <div style="font-size:13px; color:#5c4e39; margin-top:10px; margin-bottom:8px; font-weight:700;">เลือกหมวดที่ต้องการล้าง:</div>
-            <div class="letter-grid" id="irregClearLetterGrid" style="margin-top:14px;"></div>
-          `;
-          const grid = document.getElementById('irregClearLetterGrid');
-          'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(L=>{
-            const idxs = IRREG_CATS[L];
-            const btn = document.createElement('div');
-            if(!idxs || idxs.length===0){
-              btn.className='letter-btn empty';
-              btn.innerHTML = `<span class="L">${L}</span><span class="cnt">ไม่มี</span>`;
-            } else {
-              const {total:t, done:d} = irregLetterCounts(L);
-              btn.className='letter-btn';
-              btn.innerHTML = `<span class="L">${L}</span><span class="cnt">${d}/${t}</span>`;
-              btn.onclick = async ()=>{
-                const keysToDelete = idxs.map(i => norm(IRREG_VISIBLE[i][0]));
-                keysToDelete.forEach(k => delete irregMastered[k]);
-                await saveIrregMastered();
-                btn.style.opacity = '0.45';
-                btn.style.pointerEvents = 'none';
-                statusEl.innerHTML = `<div style="color:#4c6b4f; font-weight:700; margin-top:14px;">✓ ล้างหมวด ${L} แล้ว</div>`;
-              };
-            }
-            grid.appendChild(btn);
-          });
-        }
-      }
-      
-      paintClearChoices();
-      paintClearLetters();
     }
   }
   paintModeChoices();

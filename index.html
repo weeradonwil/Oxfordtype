@@ -452,8 +452,12 @@ const IRREG = [
 ["write","wrote","written","เขียน"],
 ];
 
+// limit visible irregular verbs to first N entries (safe mode)
+const IRREG_LIMIT = 266;
+// visible irregular verbs (first N), sorted alphabetically by base form
+const IRREG_VISIBLE = IRREG.slice(0, IRREG_LIMIT).slice().sort((a,b)=> (a[0]||'').localeCompare(b[0]||''));
 const IRREG_CATS = {};
-IRREG.forEach((e,i)=>{
+IRREG_VISIBLE.forEach((e,i)=>{
   const L = (e[0][0]||'').toUpperCase();
   if(!/^[A-Z]$/.test(L)) return;
   if(!IRREG_CATS[L]) IRREG_CATS[L] = [];
@@ -575,11 +579,10 @@ function renderHome(){
       <div class="stat-pill">คงเหลือ <b>${totalWords-totalDone}</b> คำ</div>
     </div>
     <div class="card">
-      <div class="setup-title">กริยา 3 ช่อง (Irregular Verbs)</div>
-      <div class="setup-sub">รวม ${IRREG.length} คำ ผ่านแล้ว ${Object.keys(irregMastered).length} คำ</div>
+        <div class="setup-title">กริยา 3 ช่อง </div>
+          <div class="setup-sub">รวม ${IRREG_VISIBLE.length} คำ ผ่านแล้ว ${Object.keys(irregMastered).length} คำ</div>
       <div class="row-between">
         <button class="btn-primary" id="irregStartBtn">เริ่มฝึกกริยา 3 ช่อง</button>
-        <button class="btn-secondary" id="irregClearBtn">ล้างความคืบหน้ากริยา 3 ช่อง</button>
       </div>
       ${irregClearStatus ? `<div class="clear-status feedback ok">${irregClearStatus}</div>` : ''}
     </div>
@@ -615,6 +618,7 @@ function renderHome(){
       <div class="clear-controls">
         <select class="clear-select" id="clearSelect">
           ${LETTERS.map(L=>`<option value="${L}">${L} — หมวด ${L}</option>`).join('')}
+          <option value="IRREG">IRREG — กริยา 3 ช่อง</option>
           <option value="AZ">AZ — ทั้งหมด (3290 คำ)</option>
         </select>
         <button class="btn-secondary" id="clearLetterBtn">ล้างหมวดที่เลือก</button>
@@ -628,7 +632,6 @@ function renderHome(){
   document.getElementById('oxfordPdfLink').href = 'data:application/pdf;base64,' + OXFORD_PDF_B64;
   document.getElementById('irregPdfLink').href = 'data:application/pdf;base64,' + IRREG_PDF_B64;
   document.getElementById('irregStartBtn').onclick = ()=>{ view='irregSetup'; renderIrregSetup(); };
-  document.getElementById('irregClearBtn').onclick = clearAllIrregMastered;
   
   // Update total word count for AZ
   document.getElementById('azWordCount').textContent = DATA.length;
@@ -682,7 +685,15 @@ function renderHome(){
 
   const clearSelect = document.getElementById('clearSelect');
   document.getElementById('clearLetterBtn').onclick = ()=>{
-    if(clearSelect) clearMasteredForLetter(clearSelect.value);
+    if(!clearSelect) return;
+    // If IRREG selected, open the irregular-verbs clear UI
+    if(clearSelect.value === 'IRREG'){
+      irregMode = 'clear';
+      view = 'irregSetup';
+      renderIrregSetup();
+      return;
+    }
+    clearMasteredForLetter(clearSelect.value);
   };
   document.getElementById('clearAllBtn').onclick = clearAllMastered;
 }
@@ -923,7 +934,7 @@ function paintStage(){
   }
 }
 
-function handleSubmit(){
+async function handleSubmit(){
   const s = session;
   const input = document.getElementById('ansInput');
   const fb = document.getElementById('fb');
@@ -973,7 +984,7 @@ function handleSubmit(){
     s.progressDone = (s.progressDone || 0) + 1;
     syncPracticeProgress();
     mastered[norm(s.curEntry[0])] = true;
-    saveMastered();
+    await saveMastered();
     setTimeout(()=>{ advance(true, s.curEntry); }, 300);
   }
 }
@@ -1011,18 +1022,18 @@ function renderSummary(){
 
 // ---------- irregular verbs mode ----------
 let irregSession = null; // {order:[idx...], pos, target, stage:'past'|'pp'|'th', results:[]}
-let irregMode = 'random'; // 'random' | 'free' | 'clear'
+let irregMode = 'letters'; // 'letters' | 'all' | 'clear'
 
 function irregLetterCounts(letter){
   const idxs = IRREG_CATS[letter] || [];
   const total = idxs.length;
-  const done = idxs.filter(i => irregMastered[norm(IRREG[i][0])]).length;
+  const done = idxs.filter(i => irregMastered[norm(IRREG_VISIBLE[i][0])]).length;
   return {total, done};
 }
 
 function renderIrregSetup(){
-  const total = IRREG.length;
-  const done = IRREG.filter(e=>irregMastered[norm(e[0])]).length;
+  const total = IRREG_VISIBLE.length;
+  const done = IRREG_VISIBLE.filter(e=>irregMastered[norm(e[0])]).length;
   const remaining = total - done;
   let html = `
     <div class="brand">
@@ -1045,8 +1056,8 @@ function renderIrregSetup(){
   function paintModeChoices(){
     modeChoicesEl.innerHTML='';
     const modes = [
-      {key:'random', label:'แบบที่ 1 — สุ่มคำศัพท์'},
-      {key:'free', label:'แบบที่ 2 — หมวด A-Z (พิมพ์อิสระ)'},
+      {key:'letters', label:'แบบที่ 1 — หมวด A-Z (กริยา 3 ช่อง)'},
+      {key:'all', label:'แบบที่ 2 — รวมทั้งหมด 266 (กริยา 3 ช่อง)'},
       {key:'clear', label:'ล้างความคืบหน้า'},
     ];
     modes.forEach(m=>{
@@ -1060,14 +1071,17 @@ function renderIrregSetup(){
 
   const bodyEl = document.getElementById('irregModeBody');
   function paintModeBody(){
-    if(irregMode==='random'){
+    if(irregMode==='all'){
       bodyEl.innerHTML = `
         <div class="row-between" style="margin-bottom:6px;"><span style="font-size:13px;color:#5c4e39;">จำนวนคำในรอบนี้</span></div>
         <div class="choice-row" id="irregCountChoices"></div>
         <label class="mini" style="margin-bottom:18px;">
           <input type="checkbox" id="irregIncludeMastered"> รวมคำที่เคยผ่านแล้วเข้ารอบทบทวนด้วย
         </label>
-        <div><button class="btn-primary" id="irregStartSessionBtn">เริ่มฝึก</button></div>
+        <div class="row-between" style="gap:12px; flex-wrap:wrap;">
+          <button class="btn-primary" id="irregStartSessionBtn">เริ่มฝึก</button>
+          <button class="btn-secondary" id="irregGoClearBtn">ล้างความคืบหน้า</button>
+        </div>
       `;
       const options = [10,20,50, total];
       const uniqOptions = [...new Set(options)].filter(n=>n>0);
@@ -1086,15 +1100,20 @@ function renderIrregSetup(){
       paintChoices();
       document.getElementById('irregStartSessionBtn').onclick = ()=>{
         const includeMastered = document.getElementById('irregIncludeMastered').checked;
-        startIrregSession(chosenCount, includeMastered);
+        startIrregFreeAllSession(chosenCount, includeMastered);
       };
-    } else if(irregMode==='free'){
+      document.getElementById('irregGoClearBtn').onclick = ()=>{
+        irregMode = 'clear';
+        paintModeChoices();
+        paintModeBody();
+      };
+    } else if(irregMode==='letters'){
       bodyEl.innerHTML = `
         <div class="letter-grid" id="irregLetterGrid"></div>
       `;
       const grid = document.getElementById('irregLetterGrid');
       'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(L=>{
-        const idxs = IRREG_CATS[L];
+          const idxs = IRREG_CATS[L];
         const btn = document.createElement('div');
         if(!idxs || idxs.length===0){
           btn.className='letter-btn empty';
@@ -1123,7 +1142,7 @@ function renderIrregSetup(){
         clearChoicesEl.innerHTML='';
         const opts = [
           {key:'all', label:'ล้างทั้งหมด'},
-          {key:'letter', label:'ล้างเฉพาะหมวด A-Z'},
+          {key:'letter', label:'ล้างเฉพาะหมวด'},
         ];
         opts.forEach(o=>{
           const b = document.createElement('button');
@@ -1142,14 +1161,18 @@ function renderIrregSetup(){
               <button class="btn-primary" style="background:#a8452f;" id="confirmClearAll">✓ ยืนยันการล้างทั้งหมด</button>
             </div>
           `;
-          document.getElementById('confirmClearAll').onclick = ()=>{
+          document.getElementById('confirmClearAll').onclick = async ()=>{
             irregMastered = {};
-            saveIrregMastered();
+            await saveIrregMastered();
+            irregClearStatus = 'ล้างความคืบหน้ากริยา 3 ช่องแล้ว';
             statusEl.innerHTML = '<div style="color:#4c6b4f; font-weight:700; margin-top:14px;">✓ ล้างความคืบหน้าเสร็จสิ้น</div>';
             setTimeout(()=>{ view='home'; renderHome(); }, 1500);
           };
         } else {
+        
+        // default: letter
           statusEl.innerHTML = `
+            <div style="font-size:13px; color:#5c4e39; margin-top:10px; margin-bottom:8px; font-weight:700;">เลือกหมวดที่ต้องการล้าง:</div>
             <div class="letter-grid" id="irregClearLetterGrid" style="margin-top:14px;"></div>
           `;
           const grid = document.getElementById('irregClearLetterGrid');
@@ -1163,12 +1186,13 @@ function renderIrregSetup(){
               const {total:t, done:d} = irregLetterCounts(L);
               btn.className='letter-btn';
               btn.innerHTML = `<span class="L">${L}</span><span class="cnt">${d}/${t}</span>`;
-              btn.onclick = ()=>{
-                const keysToDelete = idxs.map(i => norm(IRREG[i][0]));
+              btn.onclick = async ()=>{
+                const keysToDelete = idxs.map(i => norm(IRREG_VISIBLE[i][0]));
                 keysToDelete.forEach(k => delete irregMastered[k]);
-                saveIrregMastered();
+                await saveIrregMastered();
                 btn.style.opacity = '0.45';
                 btn.style.pointerEvents = 'none';
+                statusEl.innerHTML = `<div style="color:#4c6b4f; font-weight:700; margin-top:14px;">✓ ล้างหมวด ${L} แล้ว</div>`;
               };
             }
             grid.appendChild(btn);
@@ -1185,14 +1209,16 @@ function renderIrregSetup(){
 }
 
 function startIrregSession(count, includeMastered){
-  let pool = IRREG.map((_,i)=>i);
+  let pool = IRREG_VISIBLE.map((_,i)=>i);
   if(!includeMastered){
-    const unmastered = pool.filter(i=>!irregMastered[norm(IRREG[i][0])]);
+    const unmastered = pool.filter(i=>!irregMastered[norm(IRREG_VISIBLE[i][0])]);
     if(unmastered.length >= count){ pool = unmastered; }
   }
   for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
   const order = pool.slice(0, Math.min(count, pool.length));
   irregSession = { order, pos:0, target: order.length, stage:'past', results:[], progressDone:0 };
+  // expose for automated inspection
+  window.irregSession = irregSession;
   view='irregPractice';
   renderIrregPractice();
 }
@@ -1248,7 +1274,7 @@ function renderIrregFreeSetup(letter){
 function startIrregFreeSession(letter, count, includeMastered){
   let pool = (IRREG_CATS[letter]||[]).slice();
   if(!includeMastered){
-    const unmastered = pool.filter(i=>!irregMastered[norm(IRREG[i][0])]);
+    const unmastered = pool.filter(i=>!irregMastered[norm(IRREG_VISIBLE[i][0])]);
     if(unmastered.length >= count){ pool = unmastered; }
   }
   const order = pool.slice(0, Math.min(count, pool.length));
@@ -1256,6 +1282,26 @@ function startIrregFreeSession(letter, count, includeMastered){
     mode:'free', letter, order, pos:0, target: order.length,
     stage:'base', results:[], usedThisSession:new Set(), curEntry:null, curIdx:null, progressDone:0
   };
+  // expose for automated tests and external inspection
+  window.irregSession = irregSession;
+  view='irregFreePractice';
+  renderIrregFreePractice();
+}
+
+function startIrregFreeAllSession(count, includeMastered){
+  // freeAll mode: allow typing any visible irregular verb (not a pre-shuffled sequence)
+  let pool = IRREG_VISIBLE.map((_,i)=>i);
+  if(!includeMastered){
+    const unmastered = pool.filter(i=>!irregMastered[norm(IRREG_VISIBLE[i][0])]);
+    if(unmastered.length >= count){ pool = unmastered; }
+  }
+  const target = Math.min(count, pool.length);
+  irregSession = {
+    mode:'freeAll', letter:'ALL', order:null, pos:0, target,
+    stage:'base', results:[], usedThisSession:new Set(), curEntry:null, curIdx:null, progressDone:0
+  };
+  // expose for automated tests and external inspection
+  window.irregSession = irregSession;
   view='irregFreePractice';
   renderIrregFreePractice();
 }
@@ -1329,7 +1375,7 @@ function paintIrregFreeStage(){
   }
 }
 
-function handleIrregFreeSubmit(){
+async function handleIrregFreeSubmit(){
   const s = irregSession;
   const input = document.getElementById('irregFreeInput');
   const fb = document.getElementById('irregFreeFb');
@@ -1338,10 +1384,16 @@ function handleIrregFreeSubmit(){
   if(s.stage==='base'){
     const key = norm(val);
     if(!key) return;
-    const idx = IRREG.findIndex((p,i)=> IRREG_CATS[s.letter].includes(i) && norm(p[0])===key );
+    let idx = -1;
+    if(s.mode === 'free'){
+      idx = IRREG_VISIBLE.findIndex((p,i)=> IRREG_CATS[s.letter].includes(i) && norm(p[0])===key );
+    } else { // freeAll
+      idx = IRREG_VISIBLE.findIndex(p=> norm(p[0])===key );
+    }
     if(idx === -1){
       input.classList.add('err'); input.classList.remove('ok');
-      fb.textContent = 'ไม่พบคำนี้ในหมวด '+s.letter+' หรือสะกดผิด — ลองใหม่';
+      const msg = s.mode === 'free' ? ('ไม่พบคำนี้ในหมวด '+s.letter+' หรือสะกดผิด — ลองใหม่') : ('ไม่พบคำนี้ในชุดรวม หรือสะกดผิด — ลองใหม่');
+      fb.textContent = msg;
       fb.className='feedback err';
       input.select();
       return;
@@ -1357,7 +1409,7 @@ function handleIrregFreeSubmit(){
     fb.textContent = 'ถูกต้อง! ตอนนี้พิมพ์ช่องที่ 2';
     fb.className='feedback ok';
     s.usedThisSession.add(idx);
-    s.curEntry = IRREG[idx];
+    s.curEntry = IRREG_VISIBLE[idx];
     s.curIdx = idx;
     setTimeout(()=>{ s.stage='past'; paintIrregFreeStage(); }, 350);
   } else if(s.stage==='past'){
@@ -1403,7 +1455,7 @@ function handleIrregFreeSubmit(){
     if(track) track.style.width = pct + '%';
     if(label) label.textContent = `ถูกต้อง ${s.progressDone}/${s.target}`;
     irregMastered[norm(s.curEntry[0])] = true;
-    saveIrregMastered();
+    await saveIrregMastered();
     setTimeout(()=>{ advanceIrregFree(true, s.curEntry); }, 300);
   }
 }
@@ -1463,7 +1515,7 @@ function paintIrregStage(){
   const s = irregSession;
   const card = document.getElementById('irregCard');
   if(s.pos >= s.target){ renderIrregSummary(); return; }
-  const entry = IRREG[s.order[s.pos]]; // [base, past, pp, thai]
+  const entry = IRREG_VISIBLE[s.order[s.pos]]; // [base, past, pp, thai]
 
   if(s.stage==='past'){
     card.innerHTML = `
@@ -1523,9 +1575,9 @@ function paintIrregStage(){
   document.getElementById('irregSubmitBtn').onclick = handleIrregSubmit;
 }
 
-function handleIrregSubmit(){
+async function handleIrregSubmit(){
   const s = irregSession;
-  const entry = IRREG[s.order[s.pos]];
+  const entry = IRREG_VISIBLE[s.order[s.pos]];
   const input = document.getElementById('irregInput');
   const fb = document.getElementById('irregFb');
   const val = input.value;
@@ -1573,7 +1625,7 @@ function handleIrregSubmit(){
     if(track) track.style.width = pct + '%';
     if(label) label.textContent = `ถูกต้อง ${s.progressDone}/${s.target}`;
     irregMastered[norm(entry[0])] = true;
-    saveIrregMastered();
+    await saveIrregMastered();
     setTimeout(()=>{ advanceIrreg(true, entry); }, 300);
   }
 }
